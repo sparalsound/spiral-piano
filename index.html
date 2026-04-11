@@ -3,65 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>SparalSound - Spiral 3D</title>
+    <title>SparalSound - Pure White Spiral</title>
     <style>
         :root { --neon: #00f2ff; --bg: #000205; }
         body { margin: 0; overflow: hidden; background: var(--bg); color: #fff; font-family: sans-serif; touch-action: none; }
         
-        /* 상단 고정 튜너 디자인 */
+        /* 상단 고정 튜너 */
         #ui-tuner {
-            position: absolute; top: 20px; left: 0; width: 100%;
+            position: absolute; top: 10px; left: 0; width: 100%;
             text-align: center; z-index: 10; pointer-events: none;
+            display: none; /* 시작 전 숨김 */
         }
-        #note {
-            font-size: 5.5em; font-weight: 900; color: var(--neon);
-            text-shadow: 0 0 20px var(--neon); margin: 0;
-        }
-        #volume-ring {
-            width: 70px; height: 70px; border-radius: 50%;
-            border: 2px solid rgba(0, 242, 255, 0.2); margin: 0 auto;
-            transition: transform 0.05s linear;
-        }
+        #note { font-size: 5em; font-weight: 900; color: var(--neon); text-shadow: 0 0 15px var(--neon); margin: 0; }
+        #volume-ring { width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(0, 242, 255, 0.2); margin: 0 auto; transition: transform 0.05s linear; }
 
         /* 3D 렌더링 영역 */
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+        /* [핵심] 3D 텍스트 라벨 스타일 */
+        .note-label {
+            color: rgba(255, 255, 255, 0.9); /* 흰색 글씨 */
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            font-size: 14px;
+            pointer-events: none; /* 터치 무시 */
+            text-shadow: 0 0 5px #fff, 0 0 10px #000; /* 글씨 가독성 확보 */
+        }
 
         /* 시작 버튼 */
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 100;
+            justify-content: center; align-items: center; z-index: 100; text-align: center; padding: 20px; box-sizing: border-box;
         }
-        button {
-            padding: 20px 50px; font-size: 1.5em; cursor: pointer;
-            background: var(--neon); border: none; border-radius: 50px; font-weight: bold;
-        }
+        button { padding: 20px 50px; font-size: 1.5em; cursor: pointer; background: var(--neon); border: none; border-radius: 50px; font-weight: bold; color: #000; }
     </style>
 </head>
 <body>
 
     <div id="canvas-container"></div>
     
-    <div id="ui-tuner" style="display:none;">
+    <div id="ui-tuner">
         <div id="volume-ring"></div>
         <p id="note">--</p>
     </div>
 
     <div id="overlay">
         <h1 style="color:var(--neon)">SPARAL SOUND</h1>
-        <p>8-Octave Spiral System</p>
-        <button id="start-btn">START</button>
+        <p>The Geometry of 8-Octave Harmonics</p>
+        <button id="start-btn">SYSTEM START</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
 
     <script>
         const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
         const CIRCLE_OF_FIFTHS = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
         
-        let scene, camera, renderer, controls, analyser, buffer, isRunning = false;
-        const notePoints = [];
+        // 3D 엔진 및 오디오 관련 변수
+        let scene, camera, renderer, labelRenderer, controls, analyser, buffer, isRunning = false;
+        const notePoints = []; // 점과 라벨을 함께 저장할 배열
 
         // 음정 분석 엔진 (성공했던 로직)
         function autoCorrelate(buf, sampleRate) {
@@ -93,85 +96,176 @@
         function initThree() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(12, 15, 20);
+            camera.position.set(10, 15, 20); // 비스듬히 위 시점
 
+            // 1. 기본 WebGL 렌더러 (점 그리기용)
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.target.set(0, 8, 0);
+            // 2. [핵심] CSS2D 렌더러 (텍스트 라벨 그리기용)
+            labelRenderer = new THREE.CSS2DRenderer();
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.domElement.style.position = 'absolute';
+            labelRenderer.domElement.style.top = '0px';
+            labelRenderer.domElement.style.pointerEvents = 'none'; // UI 터치 방해 금지
+            document.getElementById('canvas-container').appendChild(labelRenderer.domElement);
 
-            // 가이드 고깔 및 바닥
+            // 카메라 조작
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 10, 0); // 8옥타브 중앙
+
+            // [핵심] 선명한 흰색 고깔 가이드
             const cone = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.5, 8, 30, 12, 8, true),
-                new THREE.MeshBasicMaterial({ color: 0x222222, wireframe: true, transparent: true, opacity: 0.2 })
+                new THREE.CylinderGeometry(0.5, 8, 30, 12, 10, true),
+                new THREE.MeshBasicMaterial({ 
+                    color: 0xffffff, // 순백색
+                    wireframe: true, 
+                    transparent: true, 
+                    opacity: 0.6 // 또렷하게 보이게 투명도 높임
+                })
             );
             cone.position.y = 15;
             scene.add(cone);
-            scene.add(new THREE.GridHelper(40, 10, 0x111111, 0x111111));
+
+            // 바닥 그리드 및 조명
+            scene.add(new THREE.GridHelper(40, 10, 0x222222, 0x222222));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
         }
 
-        function addPoint(x, y, z, noteIdx, vol) {
-            const color = new THREE.Color().setHSL(CIRCLE_OF_FIFTHS.indexOf(noteIdx) / 12, 1, 0.5);
-            const sphere = new THREE.Mesh(
-                new THREE.SphereGeometry(Math.max(0.2, vol * 6), 8, 8),
-                new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1 })
-            );
+        // [핵심] 점과 텍스트 라벨을 함께 추가하는 함수
+        function addPointAndLabel(x, y, z, noteIdx, octaveIdx, vol) {
+            // 소리 크기에 따라 점 크기 결정 (0.2 ~ 0.7)
+            const size = Math.max(0.2, vol * 6.0);
+            
+            // 네온 색상 계산 (5도권 무지개색)
+            const fifthIdx = CIRCLE_OF_FIFTHS.indexOf(noteIdx);
+            const color = new THREE.Color().setHSL(fifthIdx / 12, 1, 0.5);
+            
+            // 1. 네온 구체 (점) 생성
+            const material = new THREE.MeshPhongMaterial({ 
+                color: color, 
+                emissive: color, emissiveIntensity: 1.0, // 스스로 빛남
+                transparent: true, opacity: 1 
+            });
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 8), material);
             sphere.position.set(x, y, z);
             scene.add(sphere);
-            notePoints.push({ mesh: sphere, start: performance.now() });
+
+            // 2. [핵심] 3D 텍스트 라벨 생성
+            const noteDiv = document.createElement('div');
+            noteDiv.className = 'note-label';
+            noteDiv.textContent = NOTE_NAMES[noteIdx] + octaveIdx; // C4, G#3 등
+
+            const noteLabel = new THREE.CSS2DObject(noteDiv);
+            noteLabel.position.set(0, size + 0.3, 0); // 점 바로 위에 배치
+            sphere.add(noteLabel); // 점에 라벨을 종속시켜 함께 움직이게 함
+
+            // 애니메이션을 위해 배열에 저장
+            notePoints.push({ mesh: sphere, mat: material, start: performance.now(), duration: 2500 });
         }
 
+        // 애니메이션 루프
         function animate() {
             if (!isRunning) return;
             requestAnimationFrame(animate);
 
+            // 1. 오디오 분석 및 UI 업데이트
             analyser.getFloatTimeDomainData(buffer);
-            const res = autoCorrelate(buffer, audioContext.sampleRate);
+            const rms = calcRMS(buffer);
+            const res = autoCorrelate(buffer, audioContext.sampleRate, rms);
             
-            // 상단 링 반응
-            document.getElementById('volume-ring').style.transform = `scale(${0.8 + Math.min(res.rms * 2, 0.5)})`;
+            // 상단 네온 링 반응 (소리 클수록 커짐)
+            document.getElementById('volume-ring').style.transform = `scale(${0.8 + Math.min(rms * 1.5, 0.5)})`;
 
             if (res.pitch !== -1 && res.pitch < 4000) {
                 const midi = Math.round(12 * Math.log2(res.pitch / 440) + 69);
                 const noteIdx = midi % 12, octave = Math.floor(midi / 12) - 1;
 
                 if (octave >= 0 && octave <= 8) {
+                    // 상단 튜너 업데이트
                     document.getElementById('note').innerText = NOTE_NAMES[noteIdx] + octave;
-                    const angle = (CIRCLE_OF_FIFTHS.indexOf(noteIdx) * 30) * (Math.PI / 180);
-                    const radius = 8 * (1 - (octave / 10));
-                    addPoint(radius * Math.sin(angle), octave * 3.5, radius * Math.cos(angle), noteIdx, res.rms);
+                    
+                    // 2. [3D 점+글씨 생성] 좌표 계산
+                    const angle = (CIRCLE_OF_FIFTHS.indexOf(noteIdx) * 30) * (Math.PI / 180); // 5도권당 30도 회전
+                    const radius = 8 * (1 - (octave / 10)); // 위로 갈수록 좁아짐
+                    
+                    const x = radius * Math.sin(angle);
+                    const y = octave * 3.5; // 옥타브당 높이 3.5
+                    const z = radius * Math.cos(angle);
+
+                    // 점과 텍스트 라벨 추가
+                    addPointAndLabel(x, y, z, noteIdx, octave, rms);
                 }
             }
 
-            // 점 소멸 로직
+            // 3. 점+글씨 페이드 아웃 및 소멸 로직
             const now = performance.now();
             for (let i = notePoints.length - 1; i >= 0; i--) {
-                if (now - notePoints[i].start > 2500) {
-                    scene.remove(notePoints[i].mesh);
+                const p = notePoints[i];
+                const elapsed = now - p.start;
+
+                if (elapsed > p.duration) {
+                    // 수명 다함: 장면에서 제거 및 메모리 해제
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose(); 
+                    p.mesh.material.dispose();
                     notePoints.splice(i, 1);
+                } else if (elapsed > p.duration * 0.7) {
+                    // 마지막 30% 시간 동안 점과 글씨를 함께 투명하게 (페이드 아웃)
+                    p.mat.opacity = (p.duration - elapsed) / (p.duration * 0.3);
                 }
             }
-            controls.update();
-            renderer.render(scene, camera);
+
+            // 4. [핵심] 두 개의 렌더러 모두 업데이트
+            controls.update(); // 카메라 조작 업데이트
+            renderer.render(scene, camera); // 점 그리기
+            labelRenderer.render(scene, camera); // 텍스트 라벨 그리기
         }
 
-        document.getElementById('start-btn').onclick = async () => {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            analyser = ctx.createAnalyser();
-            analyser.fftSize = 2048;
-            ctx.createMediaStreamSource(stream).connect(analyser);
-            buffer = new Float32Array(analyser.fftSize);
-            audioContext = ctx;
+        // 보조 함수: 소리 크기 계산
+        function calcRMS(buf) {
+            let sum = 0, SIZE = buf.length;
+            for (let i = 0; i < SIZE; i++) sum += buf[i] * buf[i];
+            return Math.sqrt(sum / SIZE);
+        }
 
-            document.getElementById('overlay').style.display = 'none';
-            document.getElementById('ui-tuner').style.display = 'block';
-            initThree();
-            isRunning = true;
-            animate();
+        let audioContext, analyser, buffer;
+
+        // 시스템 시작 함수
+        document.getElementById('start-btn').onclick = async () => {
+            try {
+                // 오디오 엔진 시작
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') await audioContext.resume();
+
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                audioContext.createMediaStreamSource(stream).connect(analyser);
+                buffer = new Float32Array(analyser.fftSize);
+
+                // UI 전환 및 3D 시작
+                document.getElementById('overlay').style.display = 'none';
+                document.getElementById('ui-tuner').style.display = 'block';
+                initThree(); // 3D 엔진 초기화
+                isRunning = true;
+                animate(); // 애니메이션 루프 시작
+            } catch (err) {
+                alert("마이크 에러: " + err.message + ". 권한을 허용해주세요.");
+            }
         };
+
+        // 화면 크기 조절 대응
+        window.addEventListener('resize', () => {
+            if (camera && renderer && labelRenderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                labelRenderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
     </script>
 </body>
 </html>
