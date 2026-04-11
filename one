@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>8옥타브 5도권 고깔 튜너</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: sans-serif; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 8px;
+            pointer-events: none; /* UI 요소가 터치를 막지 않도록 */
+        }
+        #note-display { font-size: 2em; font-weight: bold; color: #0f0; }
+        #status { font-size: 0.8em; color: #aaa; }
+        
+        /* 시작 버튼 스타일 */
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        button {
+            padding: 15px 30px; font-size: 1.2em; cursor: pointer;
+            background: #2196F3; color: white; border: none; border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div id="note-display">--</div>
+        <div id="status">마이크 대기 중...</div>
+    </div>
+
+    <div id="overlay">
+        <h1>오디오 시각화 시작</h1>
+        <p>조용한 환경에서 피아노를 쳐보세요.</p>
+        <button onclick="startApp()">시작하기 (마이크 허용)</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pitchfinder@2.3.0/dist/pitchfinder.min.js"></script>
+
+    <script>
+        // --- 전역 변수 설정 ---
+        let scene, camera, renderer, controls;
+        let audioContext, analyser, inputPoint;
+        let pitchDetector;
+        let isRunning = false;
+        const notePoints = []; // 화면에 찍힌 점들을 관리하는 배열
+
+        const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        // 5도권 순서 (C=0, G=1, D=2...)
+        const CIRCLE_OF_FIFTHS = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5]; 
+
+        // 고깔 디자인 상수
+        const MAX_OCTAVE = 8;
+        const BOTTOM_RADIUS = 5; // 맨 아래(1옥타브) 반지름
+        const HEIGHT_STEP = 2; // 옥타브 간 수직 거리
+
+        // --- 초기화 함수 ---
+        function initThree() {
+            // 1. Scene & Camera (세로 화면에 맞춘 화각)
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.015); // 원근감 증가
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, MAX_OCTAVE * HEIGHT_STEP * 0.5, BOTTOM_RADIUS * 2.5); // 고깔 중간 높이에서 바라봄
+
+            // 2. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // 모바일 고해상도 대응
+            document.body.appendChild(renderer.domElement);
+
+            // 3. Controls (모바일 터치 조작)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // 부드러운 움직임
+            controls.target.set(0, MAX_OCTAVE * HEIGHT_STEP * 0.4, 0); // 고깔 중심을 바라보게 함
+
+            // 4. 가이드 고깔 (반투명 와이어프레임)
+            createGuideCone();
+
+            // 5. 조명
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffffff, 1);
+            pointLight.position.set(10, 10, 10);
+            scene.add(pointLight);
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        // 가이드 고깔 생성 (위가 좁고 아래가 넓은)
+        function createGuideCone() {
+            const geometry = new THREE.CylinderGeometry(
+                0.1, // topRadius (8옥타브) - 좁게
+                BOTTOM_RADIUS, // bottomRadius (1옥타브) - 넓게
+                MAX_OCTAVE * HEIGHT_STEP, // height
+                12, // segments (12음)
+                MAX_OCTAVE, // heightSegments
+                true // openEnded
+            );
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x444444,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            const cone = new THREE.Mesh(geometry, material);
+            // CylinderGeometry는 중심이 0이므로 위로 올려줌
+            cone.position.y = (MAX_OCTAVE * HEIGHT_STEP) / 2;
+            scene.add(cone);
+
+            // 바닥 그리드
+            const gridHelper = new THREE.GridHelper(BOTTOM_RADIUS * 2, 12, 0x222222, 0x222222);
+            scene.add(gridHelper);
+        }
+
+        // --- 오디오 처리 엔진 ---
+        async function initAudio() {
+            try {
+                // 마이크 권한 요청
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048; // 주파수 해상도
+                
+                inputPoint = audioContext.createMediaStreamSource(stream);
+                inputPoint.connect(analyser);
+
+                // Pitchfinder 라이브러리를 이용해 YIN 알고리즘 설정 (음높이 감지)
+                pitchDetector = pitchfinder.YIN({ sampleRate: audioContext.sampleRate });
+
+                document.getElementById('status').innerText = "마이크 분석 중...";
+                document.getElementById('status').style.color = "#0f0";
+                
+                updateAudio(); // 분석 루프 시작
+            } catch (err) {
+                console.error("마이크 접근 거부:", err);
+                document.getElementById('status').innerText = "마이크 접근 실패 (HTTPS 확인)";
+                document.getElementById('status').style.color = "#f00";
+            }
+        }
+
+        // 실시간 오디오 분석 루프
+        function updateAudio() {
+            if (!isRunning) return;
+
+            const buffer = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(buffer); // 시간 도메인 데이터 가져오기
+
+            // 음높이(주파수) 감지
+            const pitch = pitchDetector(buffer);
+
+            if (pitch) {
+                // 주파수를 미디 노트 번호로 변환 (69 = A4 = 440Hz)
+                const midiNote = 12 * Math.log2(pitch / 440) + 69;
+                const roundedMidi = Math.round(midiNote);
+
+                // 입력 세기(Volume) 확인 (너무 작은 소리는 무시)
+                let sumSquares = 0.0;
+                for (const amplitude of buffer) { sumSquares += amplitude * amplitude; }
+                const rms = Math.sqrt(sumSquares / buffer.length);
+                
+                if (rms > 0.01) { // 임계값
+                    processNote(roundedMidi, rms);
+                }
+            }
+
+            requestAnimationFrame(updateAudio);
+        }
+
+        // --- 핵심 로직: 음을 3D 좌표로 변환 및 점 생성 ---
+        function processNote(midi, volume) {
+            const octave = Math.floor(midi / 12) - 1; // 옥타브 계산 (-1~8 예상)
+            const noteIndex = midi % 12; // C, C#... 인덱스
+            
+            if (octave < 0 || octave > MAX_OCTAVE) return; // 범위 벗어남 무시
+
+            const noteName = NOTE_NAMES[noteIndex];
+            document.getElementById('note-display').innerText = `${noteName}${octave}`;
+
+            // 1. 좌표 계산 (Conceptual Mapping)
+            // 5도권 상의 인덱스 가져오기
+            const fifthIndex = CIRCLE_OF_FIFTHS.indexOf(noteIndex);
+            
+            // 각도: C=0도, G=30도 ...
+            const angle = (fifthIndex * 30) * (Math.PI / 180); 
+            
+            // 반지름: 고깔 형태 (위로 갈수록 좁아짐)
+            // 1옥타브일때 BOTTOM_RADIUS, MAX_OCTAVE일때 0.1에 가깝게
+            const radiusFactor = 1 - (octave / MAX_OCTAVE) * 0.9; 
+            const radius = BOTTOM_RADIUS * radiusFactor;
+
+            // X, Z (평면 위치), Y (높이)
+            const x = radius * Math.sin(angle); // 가시성을 위해 sin/cos 바꿈
+            const z = radius * Math.cos(angle);
+            const y = octave * HEIGHT_STEP;
+
+            // 2. 3D 점 생성
+            addNotePoint(x, y, z, noteIndex, volume);
+        }
+
+        // 장면에 점을 추가하고 관리 배열에 넣음
+        function addNotePoint(x, y, z, noteIndex, volume) {
+            // 소리 크기에 비례한 크기 (최소 0.1 ~ 최대 0.5)
+            const size = Math.max(0.1, Math.min(0.5, volume * 2));
+            
+            const geometry = new THREE.SphereGeometry(size, 16, 16);
+            
+            // 12음에 따른 색상상 (무지개색 배치)
+            const hue = noteIndex / 12;
+            const material = new THREE.MeshPhongMaterial({
+                color: new THREE.Color().setHSL(hue, 1, 0.5),
+                emissive: new THREE.Color().setHSL(hue, 1, 0.2),
+                transparent: true,
+                opacity: 1 // 처음엔 불투명
+            });
+            
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.position.set(x, y, z);
+            scene.add(sphere);
+
+            // 관리 배열에 데이터 추가
+            notePoints.push({
+                mesh: sphere,
+                material: material,
+                createdAt: performance.now(), // 생성 시간
+                lifeTime: 3000 // 수명 (3초)
+            });
+        }
+
+        // --- 애니메이션 루프 (Rendering & 점 소멸 처리) ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!isRunning) return;
+
+            controls.update(); // 드래그 조작 업데이트
+
+            // 점들의 수명 관리 및 페이드아웃
+            const now = performance.now();
+            
+            // 배열을 역순으로 돌며 제거 (안전함)
+            for (let i = notePoints.length - 1; i >= 0; i--) {
+                const p = notePoints[i];
+                const age = now - p.createdAt;
+
+                if (age > p.lifeTime) {
+                    // 수명 다함 -> 장면에서 제거 및 메모리 해제
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    notePoints.splice(i, 1); // 배열에서 제거
+                } else {
+                    // 페이드 아웃 (남은 시간에 비례해 투명도 조절)
+                    const remaining = p.lifeTime - age;
+                    // 마지막 1초 동안 서서히 투명해짐
+                    if (remaining < 1000) {
+                        p.material.opacity = remaining / 1000;
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- 기타 유틸리티 ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 시작 버튼 클릭 시 호출
+        function startApp() {
+            document.getElementById('overlay').style.display = 'none';
+            isRunning = true;
+            initThree();
+            animate();
+            initAudio(); // 오디오는 터치 이벤트 후 생성 가능
+        }
+
+    </script>
+</body>
+</html>
