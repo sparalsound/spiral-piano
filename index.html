@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SparalSound - Pitch Detector</title>
+    <title>SparalSound - Stable Pitch</title>
     <style>
         body { background: #111; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding-top: 50px; }
-        #note { font-size: 8em; font-weight: bold; color: #00f2ff; margin: 20px 0; }
+        #note { font-size: 8em; font-weight: bold; color: #00f2ff; margin: 20px 0; min-height: 1.2em; }
         #freq { font-size: 1.5em; color: #888; }
         #meter-container { width: 80%; height: 20px; background: #333; margin: 30px auto; border-radius: 10px; overflow: hidden; }
         #meter-bar { width: 0%; height: 100%; background: #00f2ff; transition: width 0.1s; }
-        button { padding: 20px 40px; font-size: 1.5em; cursor: pointer; background: #00f2ff; border: none; border-radius: 50px; font-weight: bold; }
+        button { padding: 20px 40px; font-size: 1.5em; cursor: pointer; background: #444; color: #888; border: none; border-radius: 50px; font-weight: bold; pointer-events: none; }
+        button.active { background: #00f2ff; color: #000; pointer-events: auto; }
         #status { margin-top: 20px; color: #ffeb3b; }
     </style>
 </head>
@@ -25,10 +26,10 @@
         <div id="meter-bar"></div>
     </div>
 
-    <button id="start-btn">마이크 시작</button>
-    <div id="status">버튼을 눌러 마이크를 켜주세요.</div>
+    <button id="start-btn">엔진 로딩 중...</button>
+    <div id="status">라이브러리를 불러오는 중입니다...</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/pitchfinder@2.3.0/dist/pitchfinder.min.js"></script>
+    <script src="https://unpkg.com/pitchfinder@2.3.0/dist/pitchfinder.min.js"></script>
 
     <script>
         const noteEl = document.getElementById('note');
@@ -39,6 +40,16 @@
 
         const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
+        // [핵심] 라이브러리 로드 체크
+        let checkLoad = setInterval(() => {
+            if (typeof pitchfinder !== 'undefined') {
+                clearInterval(checkLoad);
+                btn.innerText = "마이크 시작";
+                btn.className = "active";
+                statusEl.innerText = "준비가 완료되었습니다!";
+            }
+        }, 100);
+
         async function initPitch() {
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -48,7 +59,6 @@
                 analyser.fftSize = 2048;
                 source.connect(analyser);
 
-                // pitchfinder 설정
                 const detectPitch = pitchfinder.YIN({ sampleRate: audioContext.sampleRate });
                 const buffer = new Float32Array(analyser.fftSize);
 
@@ -58,32 +68,29 @@
                 function update() {
                     analyser.getFloatTimeDomainData(buffer);
                     
-                    // 볼륨 계산 (게이지 표시용)
                     let sum = 0;
                     for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
                     const rms = Math.sqrt(sum / buffer.length);
                     barEl.style.width = Math.min(rms * 500, 100) + "%";
 
-                    // 음정 감지
-                    if (rms > 0.01) { // 일정 크기 이상의 소리만 분석
+                    if (rms > 0.015) { 
                         const pitch = detectPitch(buffer);
                         if (pitch) {
-                            // 주파수를 MIDI 번호로 변환
                             const midi = Math.round(12 * Math.log2(pitch / 440) + 69);
-                            const noteName = NOTE_NAMES[midi % 12];
-                            const octave = Math.floor(midi / 12) - 1;
-
-                            noteEl.innerText = noteName + octave;
-                            freqEl.innerText = pitch.toFixed(2) + " Hz";
+                            if (midi >= 0 && midi < 127) {
+                                const noteName = NOTE_NAMES[midi % 12];
+                                const octave = Math.floor(midi / 12) - 1;
+                                noteEl.innerText = noteName + octave;
+                                freqEl.innerText = pitch.toFixed(2) + " Hz";
+                            }
                         }
                     }
                     requestAnimationFrame(update);
                 }
-
                 update();
-
             } catch (err) {
-                statusEl.innerText = "오류: " + err.message;
+                statusEl.innerText = "오류: " + err.name;
+                alert("마이크 접근을 허용해주셔야 합니다.");
             }
         }
 
