@@ -3,33 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>SparalSound - Cyber Spiral</title>
+    <title>SparalSound - Stable</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000205; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
-        #ui { position: absolute; top: 20px; left: 20px; background: rgba(0, 10, 20, 0.8); padding: 20px; border-radius: 15px; border: 1px solid #1a3a5a; pointer-events: none; z-index: 10; box-shadow: 0 0 20px rgba(0, 150, 255, 0.2); }
-        #note-display { font-size: 3em; font-weight: 800; color: #00f2ff; text-shadow: 0 0 10px #00f2ff; }
-        #status { font-size: 0.9em; color: #7f8c8d; margin-top: 10px; letter-spacing: 1px; }
-        #volume-meter { font-size: 0.8em; color: #34495e; margin-top: 5px; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, #001529 0%, #000000 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; }
-        h1 { font-size: 2.5em; margin-bottom: 15px; background: linear-gradient(45deg, #00f2ff, #0066ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        p { color: #8a99a8; margin-bottom: 40px; }
-        button { padding: 22px 50px; font-size: 1.3em; cursor: pointer; background: transparent; color: #00f2ff; border: 2px solid #00f2ff; border-radius: 10px; font-weight: bold; transition: 0.3s; }
-        button:hover { background: rgba(0, 242, 255, 0.1); box-shadow: 0 0 20px #00f2ff; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 10; border: 1px solid #333; pointer-events: none; }
+        #note-display { font-size: 2.5em; font-weight: bold; color: #00f2ff; }
+        #status { font-size: 0.9em; color: #ffeb3b; margin-top: 5px; }
+        #volume-meter { font-size: 0.8em; color: #888; margin-top: 5px; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; }
+        button { padding: 20px 40px; font-size: 1.4em; cursor: pointer; background: #00f2ff; color: #000; border: none; border-radius: 50px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="ui">
         <div id="note-display">--</div>
-        <div id="status">INITIALIZING...</div>
+        <div id="status">대기 중...</div>
         <div id="volume-meter">SIGNAL: 0.0000</div>
     </div>
 
     <div id="overlay">
-        <h1>SPARAL SOUND</h1>
-        <p>The Geometry of 8-Octave Harmonics</p>
-        <button id="start-btn">SYSTEM START</button>
+        <h1 style="color:#00f2ff">SPARAL SOUND</h1>
+        <p>피아노 소리를 입체로 시각화합니다.</p>
+        <button id="start-btn">시작하기</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -46,10 +43,12 @@
         const BOTTOM_RADIUS = 7;
         const HEIGHT_STEP = 3;
 
+        // [핵심] 페이지 로드 즉시 3D 화면부터 생성
+        initThree();
+        animate();
+
         function initThree() {
             scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x000205, 0.01);
-
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(15, 20, 25);
 
@@ -60,58 +59,41 @@
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
-            controls.autoRotate = true; // 자동으로 천천히 회전하게 하여 입체감을 더함
-            controls.autoRotateSpeed = 0.5;
             controls.target.set(0, 10, 0);
 
-            // 고깔 가이드라인 (더 선명하고 세련된 색상)
+            // 고깔 가이드라인 (가장 가벼운 소재로 변경)
             const geometry = new THREE.CylinderGeometry(0.2, BOTTOM_RADIUS, MAX_OCTAVE * HEIGHT_STEP, 12, MAX_OCTAVE, true);
-            const material = new THREE.MeshBasicMaterial({ 
-                color: 0x1a3a5a, // 진한 블루 계열
-                wireframe: true, 
-                transparent: true, 
-                opacity: 0.4 
-            });
+            const material = new THREE.MeshBasicMaterial({ color: 0x444444, wireframe: true, transparent: true, opacity: 0.5 });
             const cone = new THREE.Mesh(geometry, material);
             cone.position.y = (MAX_OCTAVE * HEIGHT_STEP) / 2;
             scene.add(cone);
-
-            // 보이지 않는 중심 축
-            const axisGeom = new THREE.CylinderGeometry(0.05, 0.05, MAX_OCTAVE * HEIGHT_STEP, 8);
-            const axisMat = new THREE.MeshBasicMaterial({ color: 0x00f2ff, transparent: true, opacity: 0.1 });
-            const axis = new THREE.Mesh(axisGeom, axisMat);
-            axis.position.y = (MAX_OCTAVE * HEIGHT_STEP) / 2;
-            scene.add(axis);
-
-            scene.add(new THREE.AmbientLight(0x101010));
-            const pl = new THREE.PointLight(0xffffff, 2);
-            pl.position.set(20, 40, 20);
-            scene.add(pl);
+            
+            // 바닥 그리드
+            scene.add(new THREE.GridHelper(30, 10, 0x222222, 0x111111));
         }
 
         async function startApp() {
             try {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioContext.state === 'suspended') await audioContext.resume();
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                await audioContext.resume();
 
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } 
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
                 document.getElementById('overlay').style.display = 'none';
                 isRunning = true;
-                document.getElementById('status').innerText = "SYSTEM ACTIVE";
 
                 analyser = audioContext.createAnalyser();
                 analyser.fftSize = 2048;
                 audioContext.createMediaStreamSource(stream).connect(analyser);
                 pitchDetector = pitchfinder.YIN({ sampleRate: audioContext.sampleRate });
 
-                initThree();
-                animate();
+                document.getElementById('status').innerText = "마이크 작동 중";
                 updateAudio();
             } catch (err) {
-                document.getElementById('status').innerText = "ERROR: MIC DENIED";
+                alert("마이크를 허용해주세요! " + err.name);
+                document.getElementById('status').innerText = "마이크 연결 필요";
             }
         }
 
@@ -126,7 +108,7 @@
 
             document.getElementById('volume-meter').innerText = "SIGNAL: " + rms.toFixed(4);
 
-            if (rms > 0.008) {
+            if (rms > 0.01) {
                 const pitch = pitchDetector(buffer);
                 if (pitch) {
                     const midi = Math.round(12 * Math.log2(pitch / 440) + 69);
@@ -138,7 +120,6 @@
                         const fifthIdx = CIRCLE_OF_FIFTHS.indexOf(noteIdx);
                         const angle = (fifthIdx * 30) * (Math.PI / 180);
                         const radius = BOTTOM_RADIUS * (1 - (octave / (MAX_OCTAVE + 1)) * 0.9);
-                        
                         addPoint(radius * Math.sin(angle), octave * HEIGHT_STEP, radius * Math.cos(angle), noteIdx, rms);
                     }
                 }
@@ -147,49 +128,31 @@
         }
 
         function addPoint(x, y, z, idx, vol) {
-            // 점 크기를 소리 크기에 따라 더 다이나믹하게 조절
-            const size = Math.max(0.18, vol * 5.0);
-            const geometry = new THREE.SphereGeometry(size, 20, 20);
-            
-            // 네온 색상 계산 (HSL 사용)
+            const size = Math.max(0.2, vol * 6.0);
+            const geometry = new THREE.SphereGeometry(size, 8, 8); // 성능을 위해 구체 해상도 낮춤
             const color = new THREE.Color().setHSL(idx / 12, 1, 0.5);
-            
-            const material = new THREE.MeshPhongMaterial({ 
-                color: color, 
-                emissive: color, 
-                emissiveIntensity: 1.2, // 더 강렬하게 빛남
-                transparent: true, 
-                opacity: 1 
-            });
+            const material = new THREE.MeshBasicMaterial({ color: color });
             const sphere = new THREE.Mesh(geometry, material);
             sphere.position.set(x, y, z);
             scene.add(sphere);
-
-            notePoints.push({ mesh: sphere, mat: material, start: performance.now(), duration: 4000 }); // 4초간 유지
+            notePoints.push({ mesh: sphere, start: performance.now() });
         }
 
         function animate() {
-            if (!isRunning) return;
             requestAnimationFrame(animate);
-            controls.update();
+            if (controls) controls.update();
+            
             const now = performance.now();
             for (let i = notePoints.length - 1; i >= 0; i--) {
-                const p = notePoints[i];
-                const elapsed = now - p.start;
-                if (elapsed > p.duration) {
-                    scene.remove(p.mesh);
-                    p.mesh.geometry.dispose();
-                    p.mesh.material.dispose();
+                if (now - notePoints[i].start > 3000) {
+                    scene.remove(notePoints[i].mesh);
                     notePoints.splice(i, 1);
-                } else if (elapsed > p.duration * 0.7) {
-                    p.mat.opacity = (p.duration - elapsed) / (p.duration * 0.3);
                 }
             }
-            renderer.render(scene, camera);
+            if (renderer && scene && camera) renderer.render(scene, camera);
         }
 
         document.getElementById('start-btn').addEventListener('click', startApp);
-        window.addEventListener('touchstart', () => { if (audioContext) audioContext.resume(); });
         window.addEventListener('resize', () => {
             if (camera && renderer) {
                 camera.aspect = window.innerWidth / window.innerHeight;
