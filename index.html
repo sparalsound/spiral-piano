@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SparalSound - Stable Pitch</title>
+    <title>SparalSound - Pure Test</title>
     <style>
-        body { background: #111; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding-top: 50px; }
-        #note { font-size: 8em; font-weight: bold; color: #00f2ff; margin: 20px 0; min-height: 1.2em; }
+        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding-top: 50px; }
+        #note { font-size: 8em; font-weight: bold; color: #00f2ff; margin: 20px 0; }
         #freq { font-size: 1.5em; color: #888; }
-        #meter-container { width: 80%; height: 20px; background: #333; margin: 30px auto; border-radius: 10px; overflow: hidden; }
-        #meter-bar { width: 0%; height: 100%; background: #00f2ff; transition: width 0.1s; }
-        button { padding: 20px 40px; font-size: 1.5em; cursor: pointer; background: #444; color: #888; border: none; border-radius: 50px; font-weight: bold; pointer-events: none; }
-        button.active { background: #00f2ff; color: #000; pointer-events: auto; }
-        #status { margin-top: 20px; color: #ffeb3b; }
+        #meter-container { width: 80%; height: 20px; background: #222; margin: 30px auto; border-radius: 10px; overflow: hidden; border: 1px solid #444; }
+        #meter-bar { width: 0%; height: 100%; background: #00f2ff; }
+        button { padding: 20px 40px; font-size: 1.5em; cursor: pointer; background: #00f2ff; border: none; border-radius: 50px; font-weight: bold; color: #000; }
+        #status { margin-top: 20px; color: #ffeb3b; font-size: 0.9em; }
     </style>
 </head>
 <body>
 
     <h1>SparalSound Pitch Test</h1>
+    <p style="color:#666">외부 라이브러리 없이 작동하는 버전입니다.</p>
     
     <div id="note">--</div>
     <div id="freq">0.00 Hz</div>
@@ -26,10 +26,8 @@
         <div id="meter-bar"></div>
     </div>
 
-    <button id="start-btn">엔진 로딩 중...</button>
-    <div id="status">라이브러리를 불러오는 중입니다...</div>
-
-    <script src="https://unpkg.com/pitchfinder@2.3.0/dist/pitchfinder.min.js"></script>
+    <button id="start-btn">마이크 시작하기</button>
+    <div id="status">버튼을 눌러 권한을 허용해주세요.</div>
 
     <script>
         const noteEl = document.getElementById('note');
@@ -40,17 +38,41 @@
 
         const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-        // [핵심] 라이브러리 로드 체크
-        let checkLoad = setInterval(() => {
-            if (typeof pitchfinder !== 'undefined') {
-                clearInterval(checkLoad);
-                btn.innerText = "마이크 시작";
-                btn.className = "active";
-                statusEl.innerText = "준비가 완료되었습니다!";
+        // [내장 엔진] 음정 분석 알고리즘 (Autocorrelation)
+        function autoCorrelate(buf, sampleRate) {
+            let SIZE = buf.length;
+            let rms = 0;
+            for (let i = 0; i < SIZE; i++) {
+                rms += buf[i] * buf[i];
             }
-        }, 100);
+            rms = Math.sqrt(rms / SIZE);
+            if (rms < 0.01) return -1; // 소리가 너무 작음
 
-        async function initPitch() {
+            let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+            for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+            for (let i = 1; i < SIZE / 2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+
+            buf = buf.slice(r1, r2);
+            SIZE = buf.length;
+
+            let c = new Float32Array(SIZE).fill(0);
+            for (let i = 0; i < SIZE; i++)
+                for (let j = 0; j < SIZE - i; j++)
+                    c[i] = c[i] + buf[j] * buf[j + i];
+
+            let d = 0; while (c[d] > c[d + 1]) d++;
+            let maxval = -1, maxpos = -1;
+            for (let i = d; i < SIZE; i++) {
+                if (c[i] > maxval) {
+                    maxval = c[i];
+                    maxpos = i;
+                }
+            }
+            let T0 = maxpos;
+            return sampleRate / T0;
+        }
+
+        async function startApp() {
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -59,42 +81,40 @@
                 analyser.fftSize = 2048;
                 source.connect(analyser);
 
-                const detectPitch = pitchfinder.YIN({ sampleRate: audioContext.sampleRate });
                 const buffer = new Float32Array(analyser.fftSize);
-
                 btn.style.display = 'none';
-                statusEl.innerText = "피아노를 쳐보세요!";
+                statusEl.innerText = "분석 중... 피아노를 쳐보세요.";
 
                 function update() {
                     analyser.getFloatTimeDomainData(buffer);
                     
+                    // 볼륨 게이지 업데이트
                     let sum = 0;
                     for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
                     const rms = Math.sqrt(sum / buffer.length);
                     barEl.style.width = Math.min(rms * 500, 100) + "%";
 
-                    if (rms > 0.015) { 
-                        const pitch = detectPitch(buffer);
-                        if (pitch) {
-                            const midi = Math.round(12 * Math.log2(pitch / 440) + 69);
-                            if (midi >= 0 && midi < 127) {
-                                const noteName = NOTE_NAMES[midi % 12];
-                                const octave = Math.floor(midi / 12) - 1;
-                                noteEl.innerText = noteName + octave;
-                                freqEl.innerText = pitch.toFixed(2) + " Hz";
-                            }
+                    // 음정 감지 실행
+                    const pitch = autoCorrelate(buffer, audioContext.sampleRate);
+
+                    if (pitch !== -1 && pitch < 3000) { // 비정상적인 고주파 제외
+                        const midi = Math.round(12 * Math.log2(pitch / 440) + 69);
+                        if (midi > 0 && midi < 128) {
+                            const noteName = NOTE_NAMES[midi % 12];
+                            const octave = Math.floor(midi / 12) - 1;
+                            noteEl.innerText = noteName + octave;
+                            freqEl.innerText = pitch.toFixed(2) + " Hz";
                         }
                     }
                     requestAnimationFrame(update);
                 }
                 update();
             } catch (err) {
-                statusEl.innerText = "오류: " + err.name;
-                alert("마이크 접근을 허용해주셔야 합니다.");
+                statusEl.innerText = "오류: " + err.message;
             }
         }
 
-        btn.onclick = initPitch;
+        btn.onclick = startApp;
     </script>
 </body>
 </html>
