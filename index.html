@@ -3,16 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>SparalSound - Live Note Tracker</title>
+    <title>SparalSound - Flat Logic Spiral</title>
     <style>
         :root { --neon: #00f2ff; --bg: #000205; }
         body { margin: 0; overflow: hidden; background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; touch-action: none; height: 100vh; }
         
-        /* 메인 튜너 */
         #ui-tuner { position: absolute; top: 20px; right: 20px; text-align: right; z-index: 10; pointer-events: none; display: none; }
         #note { font-size: 4em; font-weight: 900; color: var(--neon); text-shadow: 0 0 15px var(--neon); margin: 0; }
         
-        /* [신규] 실시간 음정 리스트 (왼쪽 상단) */
         #note-list {
             position: absolute; top: 20px; left: 20px;
             z-index: 15; pointer-events: none;
@@ -21,17 +19,13 @@
         .list-item {
             background: rgba(0, 242, 255, 0.1);
             border-left: 3px solid var(--neon);
-            padding: 8px 15px;
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 0 5px var(--neon);
+            padding: 8px 15px; font-size: 1.2em; font-weight: bold;
+            color: #fff; text-shadow: 0 0 5px var(--neon);
             border-radius: 0 5px 5px 0;
             animation: slideIn 0.3s ease-out forwards;
             backdrop-filter: blur(5px);
         }
         @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
 
         #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
@@ -41,16 +35,12 @@
 <body>
 
     <div id="canvas-container"></div>
-    
     <div id="note-list"></div>
-
-    <div id="ui-tuner">
-        <p id="note">--</p>
-    </div>
+    <div id="ui-tuner"><p id="note">--</p></div>
 
     <div id="overlay">
         <h1 style="color:var(--neon)">SPARAL SOUND</h1>
-        <p style="color:#666">Real-time Visual Log System</p>
+        <p style="color:#666">Flat(b) Enharmonic System</p>
         <button id="start-btn">SYSTEM START</button>
     </div>
 
@@ -58,7 +48,8 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <script>
-        const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        // [수정] 이명동음을 Flat(b)으로 통일
+        const NOTE_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
         const CIRCLE_OF_FIFTHS = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
         
         let scene, camera, renderer, controls, audioContext, analyser, buffer, isRunning = false;
@@ -67,9 +58,11 @@
         function createTextCanvas(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 64; canvas.height = 64;
-            ctx.fillStyle = 'white'; ctx.font = 'Bold 40px Arial';
-            ctx.textAlign = 'center'; ctx.fillText(text, 32, 45);
+            canvas.width = 128; canvas.height = 128; // 해상도 상향
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = 'Bold 50px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, 64, 80);
             return new THREE.CanvasTexture(canvas);
         }
 
@@ -105,22 +98,24 @@
 
             const cone = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.5, 9, 34, 12, 12, true),
-                new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.2 })
+                new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.15 })
             );
             cone.position.y = 17;
             scene.add(cone);
 
-            // 가이드 맵
+            // 가이드 맵 (플랫 표기 반영)
             for (let oct = 0; oct <= 8; oct++) {
                 for (let i = 0; i < 12; i++) {
                     const angle = (CIRCLE_OF_FIFTHS.indexOf(i) * 30) * (Math.PI / 180);
                     const radius = 9 * (1 - (oct / 10));
                     const x = radius * Math.sin(angle), y = oct * 4, z = radius * Math.cos(angle);
-                    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 4, 4), new THREE.MeshBasicMaterial({ color: 0x333333 }));
+                    
+                    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 4, 4), new THREE.MeshBasicMaterial({ color: 0x444444 }));
                     dot.position.set(x, y, z);
                     scene.add(dot);
+
                     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTextCanvas(NOTE_NAMES[i]), opacity: 0.4 }));
-                    sprite.position.set(x * 1.05, y, z * 1.05); sprite.scale.set(0.5, 0.5, 0.5);
+                    sprite.position.set(x * 1.05, y, z * 1.05); sprite.scale.set(0.6, 0.6, 0.6);
                     scene.add(sprite);
                 }
             }
@@ -130,7 +125,6 @@
             const fullNote = NOTE_NAMES[noteIdx] + octave;
             const color = new THREE.Color().setHSL(CIRCLE_OF_FIFTHS.indexOf(noteIdx) / 12, 1, 0.5);
             
-            // 3D 점 생성
             const sphere = new THREE.Mesh(
                 new THREE.SphereGeometry(Math.max(0.4, vol * 7), 8, 8),
                 new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1 })
@@ -138,20 +132,14 @@
             sphere.position.set(x, y, z);
             scene.add(sphere);
 
-            // [신규] 리스트 UI 요소 생성
             const listEl = document.getElementById('note-list');
             const item = document.createElement('div');
             item.className = 'list-item';
             item.innerText = fullNote;
             item.style.borderColor = "#" + color.getHexString();
-            listEl.prepend(item); // 맨 위에 추가
+            listEl.prepend(item);
 
-            activePoints.push({ 
-                mesh: sphere, 
-                mat: sphere.material, 
-                uiItem: item,
-                start: performance.now() 
-            });
+            activePoints.push({ mesh: sphere, mat: sphere.material, uiItem: item, start: performance.now() });
         }
 
         function animate() {
@@ -169,7 +157,6 @@
                     const fullNote = NOTE_NAMES[noteIdx] + octave;
                     document.getElementById('note').innerText = fullNote;
 
-                    // 같은 음이 연속으로 중복 리스팅되는 것 방지 (선택 사항)
                     const angle = (CIRCLE_OF_FIFTHS.indexOf(noteIdx) * 30) * (Math.PI / 180);
                     const radius = 9 * (1 - (octave / 10));
                     addActivePoint(radius * Math.sin(angle), octave * 4, radius * Math.cos(angle), noteIdx, octave, res.rms);
@@ -180,15 +167,14 @@
             for (let i = activePoints.length - 1; i >= 0; i--) {
                 const p = activePoints[i];
                 const age = now - p.start;
-                
                 if (age > 2500) {
                     scene.remove(p.mesh);
-                    if (p.uiItem) p.uiItem.remove(); // 리스트에서 삭제
+                    if (p.uiItem) p.uiItem.remove();
                     activePoints.splice(i, 1);
                 } else if (age > 1800) {
                     const op = (2500 - age) / 700;
                     p.mat.opacity = op;
-                    if (p.uiItem) p.uiItem.style.opacity = op; // 리스트 요소도 같이 흐려짐
+                    if (p.uiItem) p.uiItem.style.opacity = op;
                 }
             }
             controls.update();
