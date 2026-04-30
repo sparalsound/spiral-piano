@@ -2,256 +2,175 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Share Analysis Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>승우 시우의 짜장 떡볶이 선택기</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
-        body { font-family: 'Pretendard', sans-serif; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .active-item { background-color: #eff6ff; border-left: 4px solid #3b82f6 !important; }
+        body {
+            background: #1a1a2e; /* 깊은 밤하늘 느낌 */
+            color: white;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Black Han Sans', sans-serif; /* 굵고 힘있는 폰트 추천 */
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            color: #00d4ff;
+            text-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
+            margin-bottom: 20px;
+            text-align: center;
+            line-height: 1.3;
+        }
+
+        .slot-machine {
+            background: #0f3460;
+            width: 85vw;
+            max-width: 350px;
+            height: 180px;
+            border: 10px solid #e94560;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 30px rgba(233, 69, 96, 0.5);
+            position: relative;
+        }
+
+        .slot-window {
+            font-size: 3.5rem;
+            font-weight: 900;
+            transition: 0.1s;
+        }
+
+        .neon-buy { color: #00ff41; text-shadow: 0 0 25px #00ff41; }
+        .neon-skip { color: #9e9e9e; text-shadow: 0 0 10px #ffffff; }
+
+        .controls { margin-top: 40px; }
+        #lever-btn {
+            background: #e94560;
+            border: none;
+            width: 140px;
+            height: 70px;
+            border-radius: 35px;
+            font-weight: bold;
+            font-size: 1.5rem;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 8px 0 #952e3f;
+            transition: 0.1s;
+        }
+
+        #lever-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 4px 0 #952e3f;
+        }
+
+        .shake { animation: shake 0.1s infinite; }
+        @keyframes shake {
+            0% { transform: translate(2px, 2px); }
+            50% { transform: translate(-2px, -2px); }
+            100% { transform: translate(2px, 2px); }
+        }
+
+        #final-msg {
+            margin-top: 30px;
+            font-size: 1.3rem;
+            height: 3.5em;
+            color: #ffffff;
+            text-align: center;
+            padding: 0 10px;
+            font-weight: bold;
+            line-height: 1.5;
+        }
+
+        .names {
+            font-size: 1.2rem;
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 p-4 md:p-10">
-    <div class="max-w-7xl mx-auto">
-        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-            <div>
-                <h1 class="text-3xl font-extrabold tracking-tight text-slate-800">점유율 분석 리포트</h1>
-                <p class="text-slate-500 mt-1">실시간 구글 스프레드시트 연동 데이터</p>
-            </div>
-            <div id="lastUpdated" class="text-xs font-mono text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm border border-slate-100">
-                Connected to Spreadsheet
-            </div>
-        </header>
+<body>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div class="lg:col-span-4 space-y-6">
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div class="grid grid-cols-2 gap-4 mb-6">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Year</label>
-                            <select id="yearSelect" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" onchange="updateMonthOptions()">
-                                <option value="">로딩 중...</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Month</label>
-                            <select id="monthSelect" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition" onchange="updateFlavorList()" disabled>
-                                <option value="">선택</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Search Flavor</label>
-                        <input type="text" id="flavorSearch" placeholder="이름 검색..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition" oninput="renderFlavorList()">
-                    </div>
-                </div>
+    <div class="names">승우 ⭐ 시우</div>
+    <h1>짜장 떡볶이<br>먹을 준비 됐나요?</h1>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                    <div class="p-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
-                        <span class="text-xs font-bold text-slate-500">점유율 순위</span>
-                        <span class="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-0.5 rounded">Top Sort</span>
-                    </div>
-                    <div id="flavorList" class="h-[500px] overflow-y-auto p-2 space-y-1">
-                        <div class="text-center py-20 text-slate-300 text-sm">조건을 선택해 주세요</div>
-                    </div>
-                </div>
-            </div>
+    <div class="slot-machine" id="machine">
+        <div class="slot-window" id="slot-text">???</div>
+    </div>
 
-            <div class="lg:col-span-8 space-y-6">
-                <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                        <div>
-                            <h2 id="chartTitle" class="text-2xl font-extrabold text-slate-800">품목을 선택하세요</h2>
-                            <p id="subTitle" class="text-slate-400 text-sm mt-1">전체 대비 점유율 추이(%)</p>
-                        </div>
-                        <div class="flex items-center gap-6 bg-slate-50 p-4 rounded-2xl">
-                            <div class="text-center">
-                                <p class="text-[10px] font-bold text-slate-400 uppercase">Avg Share</p>
-                                <div class="flex items-baseline gap-0.5">
-                                    <span id="avgShare" class="text-2xl font-black text-blue-600">-</span>
-                                    <span class="text-xs font-bold text-blue-400">%</span>
-                                </div>
-                            </div>
-                            <div class="w-px h-8 bg-slate-200"></div>
-                            <div class="text-center text-slate-800">
-                                <p class="text-[10px] font-bold text-slate-400 uppercase">Month Total</p>
-                                <span id="monthTotal" class="text-lg font-bold">-</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="h-[400px] w-full">
-                        <canvas id="mainChart"></canvas>
-                    </div>
-                </div>
+    <div id="final-msg">버튼을 눌러 운명을 결정해봐!</div>
 
-                <div class="p-6 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-4">
-                    <div class="bg-blue-500 text-white p-2 rounded-lg text-xl">💡</div>
-                    <p class="text-sm text-blue-700 leading-relaxed">
-                        <b>점유율 계산 방식:</b> 해당 일자의 전체 판매 합계를 100%로 두고, 선택한 품목의 기여도를 계산합니다. 
-                        절대적인 수치보다 <strong>상대적인 인기 변화</strong>를 감지하는 데 효과적입니다.
-                    </p>
-                </div>
-            </div>
-        </div>
+    <div class="controls">
+        <button id="lever-btn">GO!!</button>
     </div>
 
     <script>
-        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSk_3J6YWbjmWoWzOULkgWvICByjwVL6FGuZJSoBKtZBm3YlSeC1m6nKy3MSs7VdquYA4EKIoGZ1-Me/pub?gid=0&single=true&output=csv';
+        const slotText = document.getElementById('slot-text');
+        const leverBtn = document.getElementById('lever-btn');
+        const machine = document.getElementById('machine');
+        const finalMsg = document.getElementById('final-msg');
+
+        const midOptions = ["지글지글", "슈퍼파워", "대박사건", "냠냠쩝쩝", "출발직전"];
         
-        let rawData = [];
-        let filteredByMonth = [];
-        let dailyTotals = []; 
-        let myChart = null;
+        const buyMessages = [
+            "🎉 예쓰! 오늘 메뉴는 짜장 떡볶이다!",
+            "🚀 짜장 로켓 발사! 곧 도착합니다!",
+            "👑 승우와 시우의 멋진 파티 타임!",
+            "🍗 맛있는 떡볶이가 사달라고 외쳐요!",
+            "🔥 역시 운명은 먹는 쪽을 선택했어!"
+        ];
 
-        async function init() {
-            try {
-                const response = await fetch(CSV_URL);
-                const csvText = await response.text();
-                const rows = csvText.split('\n').map(row => row.split(','));
-                
-                rawData = rows.slice(1).filter(r => r[2]).map(r => ({
-                    year: r[0].trim(),
-                    month: r[1].trim(),
-                    name: r[2].trim(),
-                    daily: r.slice(3, 34).map(v => parseInt(v.replace(/[^0-9]/g, '')) || 0)
-                }));
+        let isSpinning = false;
 
-                const years = [...new Set(rawData.map(d => d.year))].sort();
-                const yearSelect = document.getElementById('yearSelect');
-                yearSelect.innerHTML = '<option value="">Year</option>' + 
-                    years.map(y => `<option value="${y}">${y}년</option>`).join('');
-
-            } catch (err) {
-                console.error("Data Load Error:", err);
-            }
-        }
-
-        function updateMonthOptions() {
-            const year = document.getElementById('yearSelect').value;
-            const monthSelect = document.getElementById('monthSelect');
-            if (!year) { monthSelect.disabled = true; return; }
-
-            const months = [...new Set(rawData.filter(d => d.year === year).map(d => d.month))].sort((a,b) => a-b);
-            monthSelect.innerHTML = '<option value="">Month</option>' + 
-                months.map(m => `<option value="${m}">${m}월</option>`).join('');
-            monthSelect.disabled = false;
-        }
-
-        function updateFlavorList() {
-            const year = document.getElementById('yearSelect').value;
-            const month = document.getElementById('monthSelect').value;
+        function spin() {
+            if (isSpinning) return;
+            isSpinning = true;
             
-            filteredByMonth = rawData.filter(d => d.year === year && d.month === month);
+            machine.classList.add('shake');
+            finalMsg.innerText = "과연 결과는...?!";
+            leverBtn.disabled = true;
 
-            dailyTotals = Array(31).fill(0);
-            filteredByMonth.forEach(item => {
-                item.daily.forEach((val, i) => dailyTotals[i] += val);
-            });
-
-            document.getElementById('monthTotal').innerText = dailyTotals.reduce((a,b) => a+b, 0).toLocaleString();
-            renderFlavorList();
-        }
-
-        function renderFlavorList() {
-            const searchTerm = document.getElementById('flavorSearch').value.toLowerCase();
-            const listContainer = document.getElementById('flavorList');
-            const monthGrandTotal = dailyTotals.reduce((a, b) => a + b, 0);
-
-            // 데이터 가공 및 정렬
-            let displayList = filteredByMonth
-                .filter(item => item.name.toLowerCase().includes(searchTerm))
-                .map(item => {
-                    const itemTotal = item.daily.reduce((a, b) => a + b, 0);
-                    const share = monthGrandTotal > 0 ? (itemTotal / monthGrandTotal) * 100 : 0;
-                    return { ...item, share };
-                })
-                .sort((a, b) => b.share - a.share); // 점유율 순 내림차순 정렬
-
-            if (displayList.length === 0) {
-                listContainer.innerHTML = `<div class="text-center py-20 text-slate-300 text-sm">결과가 없습니다</div>`;
-                return;
-            }
-
-            listContainer.innerHTML = displayList.map((item, index) => `
-                <div onclick="selectAndDraw('${item.name}', this)" 
-                     class="flavor-item flex justify-between items-center p-3.5 hover:bg-slate-50 cursor-pointer rounded-2xl transition border-l-4 border-transparent">
-                    <div class="flex items-center gap-3">
-                        <span class="text-[10px] font-black text-slate-300 w-4">${index + 1}</span>
-                        <span class="font-semibold text-slate-700">${item.name}</span>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <div class="w-12 bg-slate-100 h-1 rounded-full overflow-hidden hidden sm:block">
-                            <div class="bg-blue-500 h-full" style="width: ${item.share}%"></div>
-                        </div>
-                        <span class="text-xs font-bold text-blue-600 w-10 text-right">${item.share.toFixed(1)}%</span>
-                    </div>
-                </div>`).join('');
-        }
-
-        function selectAndDraw(name, el) {
-            document.querySelectorAll('.flavor-item').forEach(i => i.classList.remove('active-item'));
-            el.classList.add('active-item');
-            drawChart(name);
-        }
-
-        function drawChart(flavorName) {
-            const dataObj = filteredByMonth.find(d => d.name === flavorName);
-            if (!dataObj) return;
-
-            const shareData = dataObj.daily.map((val, i) => {
-                return dailyTotals[i] > 0 ? ((val / dailyTotals[i]) * 100).toFixed(2) : 0;
-            });
-
-            const avg = (shareData.reduce((a,b) => parseFloat(a)+parseFloat(b), 0) / 31).toFixed(2);
-            document.getElementById('chartTitle').innerText = flavorName;
-            document.getElementById('avgShare').innerText = avg;
-
-            const ctx = document.getElementById('mainChart').getContext('2d');
-            if (myChart) myChart.destroy();
-
-            myChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: Array.from({length: 31}, (_, i) => `${i + 1}일`),
-                    datasets: [{
-                        data: shareData,
-                        borderColor: '#3b82f6',
-                        borderWidth: 4,
-                        pointBackgroundColor: '#ffffff',
-                        pointBorderColor: '#3b82f6',
-                        pointBorderWidth: 2,
-                        pointRadius: 4,
-                        backgroundColor: (context) => {
-                            const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 400);
-                            gradient.addColorStop(0, 'rgba(59, 130, 246, 0.15)');
-                            gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
-                            return gradient;
-                        },
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: { 
-                            beginAtZero: true, 
-                            ticks: { callback: v => v + '%' },
-                            grid: { color: '#f8fafc' } 
-                        },
-                        x: { grid: { display: false } }
-                    }
+            let count = 0;
+            const duration = 20; 
+            
+            const interval = setInterval(() => {
+                slotText.innerText = midOptions[Math.floor(Math.random() * midOptions.length)];
+                slotText.style.color = "#ffd700";
+                
+                count++;
+                if (count > duration) {
+                    clearInterval(interval);
+                    stopSpin();
                 }
-            });
+            }, 80);
         }
 
-        init();
+        function stopSpin() {
+            machine.classList.remove('shake');
+            isSpinning = false;
+            leverBtn.disabled = false;
+
+            const result = Math.random() > 0.05 ? "사간다!" : "만다...";
+            slotText.innerText = result;
+
+            if (result === "사간다!") {
+                slotText.className = "slot-window neon-buy";
+                finalMsg.innerText = buyMessages[Math.floor(Math.random() * buyMessages.length)];
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+            } else {
+                slotText.className = "slot-window neon-skip";
+                finalMsg.innerText = "😲 엥? 안 사간다고?! \n한 번 더 눌러서 기회를 주자!";
+                if (navigator.vibrate) navigator.vibrate(200);
+            }
+        }
+
+        leverBtn.addEventListener('click', spin);
     </script>
 </body>
 </html>
